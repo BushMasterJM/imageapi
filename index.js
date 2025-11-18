@@ -1,7 +1,6 @@
 import express from "express";
 import fileUpload from "express-fileupload";
-import { s3 } from "./spaces.js";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { pipeline } from "stream";
 import { promisify } from "util";
 import fs from "fs";
@@ -9,14 +8,25 @@ import fs from "fs";
 const app = express();
 const pipe = promisify(pipeline);
 
+// Initialize S3 client for DigitalOcean Spaces
+const s3 = new S3Client({
+  region: "us-east-1", // Required by AWS SDK but ignored by DO
+  endpoint: "https://sfo3.digitaloceanspaces.com", // <-- Region endpoint, NOT bucket URL
+  forcePathStyle: false, // Must be false for DO Spaces
+  credentials: {
+    accessKeyId: process.env.SPACES_KEY,
+    secretAccessKey: process.env.SPACES_SECRET,
+  },
+});
+
 // parse JSON
 app.use(express.json());
 
-// enable file upload with robust options
+// enable file upload
 app.use(
   fileUpload({
     createParentPath: true,
-    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
     abortOnLimit: true,
     useTempFiles: true,
     tempFileDir: "/tmp/",
@@ -41,13 +51,13 @@ app.post("/upload-file", async (req, res) => {
     const file = req.files.file;
     console.log("Uploading file:", file.name, file.mimetype, file.size);
 
-    // Use read stream if temp file exists, otherwise use buffer
+    // Use temp file stream if available
     const body = file.tempFilePath
       ? fs.createReadStream(file.tempFilePath)
       : file.data;
 
     const command = new PutObjectCommand({
-      Bucket: process.env.SPACES_BUCKET,
+      Bucket: process.env.SPACES_BUCKET, // Just the bucket name, e.g., "imagestoragebucket"
       Key: file.name,
       Body: body,
       ContentType: file.mimetype,
