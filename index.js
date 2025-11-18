@@ -11,8 +11,16 @@ const pipe = promisify(pipeline);
 // parse JSON
 app.use(express.json());
 
-// enable file upload
-app.use(fileUpload());
+// enable file upload with robust options
+app.use(
+  fileUpload({
+    createParentPath: true,
+    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
+    abortOnLimit: true,
+    useTempFiles: true,
+    tempFileDir: "/tmp/",
+  })
+);
 
 // Test route
 app.get("/", (req, res) => {
@@ -22,6 +30,8 @@ app.get("/", (req, res) => {
 // Upload to Spaces
 app.post("/upload-file", async (req, res) => {
   try {
+    console.log("Incoming files:", req.files); // debug
+
     if (!req.files || !req.files.file) {
       return res.status(400).send("No file uploaded");
     }
@@ -31,9 +41,9 @@ app.post("/upload-file", async (req, res) => {
     const command = new PutObjectCommand({
       Bucket: process.env.SPACES_BUCKET,
       Key: file.name,
-      Body: file.data,
+      Body: file.tempFilePath ? file.mv(file.tempFilePath) : file.data,
       ContentType: file.mimetype,
-      ACL: "public-read", // optional: make file public
+      ACL: "public-read",
     });
 
     await s3.send(command);
@@ -41,7 +51,7 @@ app.post("/upload-file", async (req, res) => {
     const url = `${process.env.SPACES_CDN}/${file.name}`;
     res.json({ message: "File uploaded!", filename: file.name, url });
   } catch (err) {
-    console.error(err);
+    console.error("Upload failed:", err);
     res.status(500).send("Upload failed");
   }
 });
@@ -61,7 +71,7 @@ app.get("/download-file/:filename", async (req, res) => {
     res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
     await pipe(data.Body, res);
   } catch (err) {
-    console.error(err);
+    console.error("Download failed:", err);
     res.status(404).send("File not found");
   }
 });
