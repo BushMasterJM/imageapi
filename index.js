@@ -20,7 +20,7 @@ const pipe = promisify(pipeline);
 const uploadMetrics = [];
 const deletedImages = [];
 
-// --- DigitalOcean Spaces Client ---
+// DigitalOcean Spaces Client
 const s3 = new S3Client({
   region: "us-east-1",
   endpoint: "https://sfo3.digitaloceanspaces.com",
@@ -31,7 +31,7 @@ const s3 = new S3Client({
   },
 });
 
-// --- Middleware ---
+// Middleware
 app.use(express.json());
 app.use(
   fileUpload({
@@ -43,17 +43,19 @@ app.use(
   })
 );
 
-// --- Swagger UI ---
+// Swagger UI
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// --- Test Route ---
+// Test Route
 app.get("/", (req, res) =>
   res.send(
-    "Image API Running (Upload + Download + Delete + Swagger docs at /swagger)"
+    "Image API Running (Upload + Download + Delete + Metrics + Swagger at /swagger)"
   )
 );
 
-// --- Upload Route (with resizing) ---
+// ===============================================================
+// =====================  IMAGE UPLOAD ROUTE  =====================
+// ===============================================================
 app.post("/upload", async (req, res) => {
   try {
     if (!req.files || !req.files.file)
@@ -66,12 +68,13 @@ app.post("/upload", async (req, res) => {
 
     const imageId = uuid();
     const variants = {
-      original: null,
+      original: null, // store original as-is
       thumbnail: 100,
       small: 300,
       medium: 800,
       large: 1600,
     };
+
     const uploadedUrls = {};
 
     // Upload original
@@ -89,6 +92,7 @@ app.post("/upload", async (req, res) => {
     // Upload resized variants
     for (const [name, width] of Object.entries(variants)) {
       if (name === "original") continue;
+
       const buffer = await sharp(file.tempFilePath)
         .resize({ width, withoutEnlargement: true })
         .toFormat("jpeg")
@@ -125,17 +129,19 @@ app.post("/upload", async (req, res) => {
   }
 });
 
-// --- Download Route (supports variant) ---
-app.get("/image/:id/:variant?", async (req, res) => {
-  try {
-    const { id, variant } = req.params;
-    const key =
-      variant && variant !== "original" ? `${id}/${variant}.jpg` : `${id}/original`;
+// ===============================================================
+// =====================  IMAGE DOWNLOAD ROUTES  ===================
+// ===============================================================
 
+// Download original
+app.get("/image/:id", async (req, res) => {
+  const { id } = req.params;
+  const key = `${id}/original`;
+
+  try {
     const data = await s3.send(
       new GetObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key })
     );
-
     res.setHeader("Content-Type", data.ContentType || "image/jpeg");
     await pipe(data.Body, res);
   } catch (err) {
@@ -144,17 +150,36 @@ app.get("/image/:id/:variant?", async (req, res) => {
   }
 });
 
-// --- Delete Route (removes all variants) ---
-app.delete("/image/:id", async (req, res) => {
+// Download variant
+app.get("/image/:id/:variant", async (req, res) => {
+  const { id, variant } = req.params;
+  const key = `${id}/${variant}.jpg`;
+
   try {
-    const { id } = req.params;
-    const variants = ["original", "thumbnail.jpg", "small.jpg", "medium.jpg", "large.jpg"];
+    const data = await s3.send(
+      new GetObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key })
+    );
+    res.setHeader("Content-Type", data.ContentType || "image/jpeg");
+    await pipe(data.Body, res);
+  } catch (err) {
+    console.error("Download variant failed:", err);
+    res.status(404).send("Image variant not found");
+  }
+});
+
+// ===============================================================
+// ========================  DELETE ROUTE  ========================
+// ===============================================================
+app.delete("/image/:id", async (req, res) => {
+  const { id } = req.params;
+  const variants = ["original", "thumbnail.jpg", "small.jpg", "medium.jpg", "large.jpg"];
+
+  try {
     for (const variant of variants) {
       await s3.send(
         new DeleteObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: `${id}/${variant}` })
       );
     }
-
     deletedImages.push({ id, deletedAt: Date.now() });
     res.json({ message: "Image deleted", id });
   } catch (err) {
@@ -163,12 +188,16 @@ app.delete("/image/:id", async (req, res) => {
   }
 });
 
-// --- Upload Metrics ---
+// ===============================================================
+// ===================  UPLOAD METRICS  ==========================
+// ===============================================================
 app.get("/metrics/uploads", (req, res) => {
   res.json(uploadMetrics);
 });
 
-// --- Lifecycle Cleanup ---
+// ===============================================================
+// ==========  LIFECYCLE CLEANUP (Hourly Purge)  ==================
+// ===============================================================
 setInterval(() => {
   const now = Date.now();
   const retention = 7 * 24 * 60 * 60 * 1000;
@@ -180,6 +209,8 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
-// --- Server Start ---
+// ===============================================================
+// ========================  SERVER START  ========================
+// ===============================================================
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`Server running on port ${port}`));
