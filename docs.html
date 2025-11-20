@@ -1,0 +1,34 @@
+<!-- docs.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image API Documentation</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.6; }
+    code { background: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Image API Documentation</h1>
+  
+  <h2>Upload an Image</h2>
+  <p><strong>POST</strong> /upload</p>
+  <p>Headers: <code>Authorization: Bearer &lt;token&gt;</code></p>
+  <p>Form-data: <code>file</code> (image file)</p>
+
+  <h2>Download an Image</h2>
+  <p><strong>GET</strong> /image/:id</p>
+
+  <h2>Delete an Image</h2>
+  <p><strong>DELETE</strong> /image/:id</p>
+  <p>Headers: <code>Authorization: Bearer &lt;token&gt;</code></p>
+
+  <h2>Upload Metrics</h2>
+  <p><strong>GET</strong> /metrics/uploads</p>
+  <p>Headers: <code>Authorization: Bearer &lt;token&gt;</code></p>
+
+</body>
+</html>

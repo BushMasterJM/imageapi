@@ -11,6 +11,8 @@ import { promisify } from "util";
 import fs from "fs";
 import { v4 as uuid } from "uuid";
 import jwt from "jsonwebtoken";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 const pipe = promisify(pipeline);
@@ -19,7 +21,7 @@ const pipe = promisify(pipeline);
 const uploadMetrics = [];
 const deletedImages = [];
 
-// --- Authentication Middleware ---
+// --- Auth Middleware ---
 const auth = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).send("No token provided");
@@ -55,8 +57,14 @@ app.use(
   })
 );
 
+// --- File paths for serving docs ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // --- Test Route ---
-app.get("/", (req, res) => res.send("Image API Running (Upload + Download + Delete + Auth)"));
+app.get("/", (req, res) =>
+  res.send("Image API Running (Upload + Download + Delete + Auth + Docs)")
+);
 
 // ===============================================================
 // =====================  IMAGE UPLOAD ROUTE  =====================
@@ -69,7 +77,6 @@ app.post("/upload", auth, async (req, res) => {
 
     const file = req.files.file;
     const allowed = ["image/jpeg", "image/png", "image/gif"];
-
     if (!allowed.includes(file.mimetype)) {
       return res.status(400).json({ error: "Invalid file type" });
     }
@@ -116,7 +123,6 @@ app.get("/image/:id", async (req, res) => {
 
   try {
     const key = `${id}/original`;
-
     const data = await s3.send(
       new GetObjectCommand({
         Bucket: process.env.SPACES_BUCKET,
@@ -162,6 +168,13 @@ app.delete("/image/:id", auth, async (req, res) => {
 // ===============================================================
 app.get("/metrics/uploads", auth, (req, res) => {
   res.json(uploadMetrics);
+});
+
+// ===============================================================
+// ===================  REST API DOCS ROUTE  =====================
+// ===============================================================
+app.get("/docs", (req, res) => {
+  res.sendFile(path.join(__dirname, "docs.html"));
 });
 
 // ===============================================================
