@@ -10,7 +10,6 @@ import { pipeline } from "stream";
 import { promisify } from "util";
 import fs from "fs";
 import { v4 as uuid } from "uuid";
-import jwt from "jsonwebtoken";
 import swaggerUi from "swagger-ui-express";
 import swaggerDocument from "./swagger.js";
 import sharp from "sharp";
@@ -21,20 +20,7 @@ const pipe = promisify(pipeline);
 const uploadMetrics = [];
 const deletedImages = [];
 
-// Auth Middleware
-const auth = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).send("No token provided");
-
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).send("Invalid token");
-  }
-};
-
-// DigitalOcean Spaces Client
+// --- DigitalOcean Spaces Client ---
 const s3 = new S3Client({
   region: "us-east-1",
   endpoint: "https://sfo3.digitaloceanspaces.com",
@@ -45,30 +31,30 @@ const s3 = new S3Client({
   },
 });
 
-// Middleware
+// --- Middleware ---
 app.use(express.json());
 app.use(
   fileUpload({
     createParentPath: true,
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     abortOnLimit: true,
     useTempFiles: true,
     tempFileDir: "/tmp/",
   })
 );
 
-// Swagger UI
+// --- Swagger UI ---
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// Test Route
+// --- Test Route ---
 app.get("/", (req, res) =>
   res.send(
-    "Image API Running (Upload + Download + Delete + Auth + Swagger docs at /swagger)"
+    "Image API Running (Upload + Download + Delete + Swagger docs at /swagger)"
   )
 );
 
-// Upload Route (with resizing)
-app.post("/upload", auth, async (req, res) => {
+// --- Upload Route (with resizing) ---
+app.post("/upload", async (req, res) => {
   try {
     if (!req.files || !req.files.file)
       return res.status(400).json({ error: "No file uploaded" });
@@ -80,13 +66,12 @@ app.post("/upload", auth, async (req, res) => {
 
     const imageId = uuid();
     const variants = {
-      original: null, // store original as-is
+      original: null,
       thumbnail: 100,
       small: 300,
       medium: 800,
       large: 1600,
     };
-
     const uploadedUrls = {};
 
     // Upload original
@@ -125,7 +110,6 @@ app.post("/upload", auth, async (req, res) => {
     uploadMetrics.push({
       id: imageId,
       size: file.size,
-      uploadedBy: req.user.email,
       type: file.mimetype,
       timestamp: Date.now(),
     });
@@ -141,7 +125,7 @@ app.post("/upload", auth, async (req, res) => {
   }
 });
 
-// Download Route (supports variant)
+// --- Download Route (supports variant) ---
 app.get("/image/:id/:variant?", async (req, res) => {
   try {
     const { id, variant } = req.params;
@@ -160,8 +144,8 @@ app.get("/image/:id/:variant?", async (req, res) => {
   }
 });
 
-// Delete Route (removes all variants)
-app.delete("/image/:id", auth, async (req, res) => {
+// --- Delete Route (removes all variants) ---
+app.delete("/image/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const variants = ["original", "thumbnail.jpg", "small.jpg", "medium.jpg", "large.jpg"];
@@ -179,12 +163,12 @@ app.delete("/image/:id", auth, async (req, res) => {
   }
 });
 
-// Upload Metrics
-app.get("/metrics/uploads", auth, (req, res) => {
+// --- Upload Metrics ---
+app.get("/metrics/uploads", (req, res) => {
   res.json(uploadMetrics);
 });
 
-// Lifecycle Cleanup
+// --- Lifecycle Cleanup ---
 setInterval(() => {
   const now = Date.now();
   const retention = 7 * 24 * 60 * 60 * 1000;
@@ -196,6 +180,6 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
-// Server Start
+// --- Server Start ---
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`Server running on port ${port}`));
