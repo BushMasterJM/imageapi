@@ -1,11 +1,11 @@
-const swaggerDocument = {
-  openapi: "3.0.3",
+export default {
+  openapi: "3.0.0",
   info: {
     title: "Image API",
     version: "1.0.0",
-    description: "Upload, download, and delete images on DigitalOcean Spaces",
+    description: "Upload, resize, download, and delete images",
   },
-  servers: [{ url: "http://localhost:8080", description: "Local server" }],
+  servers: [{ url: "http://localhost:8080" }],
   paths: {
     "/upload": {
       post: {
@@ -20,49 +20,32 @@ const swaggerDocument = {
                 properties: {
                   file: { type: "string", format: "binary" },
                 },
-                required: ["file"],
               },
             },
           },
         },
         responses: {
           200: { description: "Upload successful" },
-          400: { description: "Bad request" },
-          401: { description: "Unauthorized" },
+          400: { description: "Invalid request" },
         },
+      },
+    },
+    "/image/{id}/{variant}": {
+      get: {
+        summary: "Get an image (optional variant)",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "variant", in: "path", required: false, schema: { type: "string" } },
+        ],
+        responses: { 200: { description: "Returns image" }, 404: { description: "Not found" } },
       },
     },
     "/image/{id}": {
-      get: {
-        summary: "Download image",
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string" } },
-        ],
-        responses: {
-          200: { description: "Image returned" },
-          404: { description: "Not found" },
-        },
-      },
       delete: {
-        summary: "Delete image",
+        summary: "Delete image and all variants",
         security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string" } },
-        ],
-        responses: {
-          200: { description: "Deleted successfully" },
-          401: { description: "Unauthorized" },
-          500: { description: "Delete failed" },
-        },
-      },
-    },
-    "/metrics/uploads": {
-      get: {
-        summary: "Get upload metrics",
-        security: [{ bearerAuth: [] }],
-        responses: {
-          200: { description: "Returns metrics" },
-        },
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { 200: { description: "Deleted" }, 500: { description: "Error" } },
       },
     },
   },
@@ -72,5 +55,3 @@ const swaggerDocument = {
     },
   },
 };
-
-export default swaggerDocument;

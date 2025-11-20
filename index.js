@@ -13,6 +13,7 @@ import { v4 as uuid } from "uuid";
 import jwt from "jsonwebtoken";
 import swaggerUi from "swagger-ui-express";
 import swaggerDocument from "./swagger.js";
+import sharp from "sharp";
 
 const app = express();
 const pipe = promisify(pipeline);
@@ -60,9 +61,13 @@ app.use(
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Test Route
-app.get("/", (req, res) => res.send("Image API Running (Upload + Download + Delete + Auth + Swagger docs at /swagger)"));
+app.get("/", (req, res) =>
+  res.send(
+    "Image API Running (Upload + Download + Delete + Auth + Swagger docs at /swagger)"
+  )
+);
 
-// Upload Route
+// Upload Route (with resizing)
 app.post("/upload", auth, async (req, res) => {
   try {
     if (!req.files || !req.files.file)
@@ -74,19 +79,48 @@ app.post("/upload", auth, async (req, res) => {
       return res.status(400).json({ error: "Invalid file type" });
 
     const imageId = uuid();
-    const key = `${imageId}/original`;
+    const variants = {
+      original: null, // store original as-is
+      thumbnail: 100,
+      small: 300,
+      medium: 800,
+      large: 1600,
+    };
 
+    const uploadedUrls = {};
+
+    // Upload original
     await s3.send(
       new PutObjectCommand({
         Bucket: process.env.SPACES_BUCKET,
-        Key: key,
+        Key: `${imageId}/original`,
         Body: fs.createReadStream(file.tempFilePath),
         ContentType: file.mimetype,
         ACL: "public-read",
       })
     );
+    uploadedUrls.original = `${process.env.SPACES_CDN}/${imageId}/original`;
 
-    const url = `${process.env.SPACES_CDN}/${key}`;
+    // Upload resized variants
+    for (const [name, width] of Object.entries(variants)) {
+      if (name === "original") continue;
+      const buffer = await sharp(file.tempFilePath)
+        .resize({ width, withoutEnlargement: true })
+        .toFormat("jpeg")
+        .toBuffer();
+
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: process.env.SPACES_BUCKET,
+          Key: `${imageId}/${name}.jpg`,
+          Body: buffer,
+          ContentType: "image/jpeg",
+          ACL: "public-read",
+        })
+      );
+
+      uploadedUrls[name] = `${process.env.SPACES_CDN}/${imageId}/${name}.jpg`;
+    }
 
     uploadMetrics.push({
       id: imageId,
@@ -96,19 +130,27 @@ app.post("/upload", auth, async (req, res) => {
       timestamp: Date.now(),
     });
 
-    res.json({ message: "Upload successful", id: imageId, url });
+    res.json({
+      message: "Upload successful",
+      id: imageId,
+      urls: uploadedUrls,
+    });
   } catch (err) {
     console.error("Upload failed:", err);
-    res.status(500).json({ error: "Upload failed" });
+    res.status(500).json({ error: "Upload failed", details: err.message });
   }
 });
 
-// Download Route
-app.get("/image/:id", async (req, res) => {
+// Download Route (supports variant)
+app.get("/image/:id/:variant?", async (req, res) => {
   try {
-    const { id } = req.params;
-    const key = `${id}/original`;
-    const data = await s3.send(new GetObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key }));
+    const { id, variant } = req.params;
+    const key =
+      variant && variant !== "original" ? `${id}/${variant}.jpg` : `${id}/original`;
+
+    const data = await s3.send(
+      new GetObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key })
+    );
 
     res.setHeader("Content-Type", data.ContentType || "image/jpeg");
     await pipe(data.Body, res);
@@ -118,13 +160,17 @@ app.get("/image/:id", async (req, res) => {
   }
 });
 
-// Delete Route
+// Delete Route (removes all variants)
 app.delete("/image/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const key = `${id}/original`;
+    const variants = ["original", "thumbnail.jpg", "small.jpg", "medium.jpg", "large.jpg"];
+    for (const variant of variants) {
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: `${id}/${variant}` })
+      );
+    }
 
-    await s3.send(new DeleteObjectCommand({ Bucket: process.env.SPACES_BUCKET, Key: key }));
     deletedImages.push({ id, deletedAt: Date.now() });
     res.json({ message: "Image deleted", id });
   } catch (err) {
