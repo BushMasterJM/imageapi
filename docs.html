@@ -1,34 +1,74 @@
-<!-- docs.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Image API Documentation</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.6; }
-    code { background: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
-    pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    h1, h2 { color: #333; }
+    code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+    pre { background: #f9f9f9; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    section { margin-bottom: 2rem; }
   </style>
 </head>
 <body>
   <h1>Image API Documentation</h1>
-  
-  <h2>Upload an Image</h2>
-  <p><strong>POST</strong> /upload</p>
-  <p>Headers: <code>Authorization: Bearer &lt;token&gt;</code></p>
-  <p>Form-data: <code>file</code> (image file)</p>
 
-  <h2>Download an Image</h2>
-  <p><strong>GET</strong> /image/:id</p>
+  <section>
+    <h2>POST /upload</h2>
+    <p><strong>Description:</strong> Upload an image (JPEG, PNG, GIF)</p>
+    <p><strong>Headers:</strong></p>
+    <pre>Authorization: Bearer &lt;token&gt;</pre>
+    <p><strong>Body (multipart/form-data):</strong></p>
+    <pre>file=&lt;your image file&gt;</pre>
+    <p><strong>Success Response:</strong></p>
+    <pre>
+{
+  "message": "Upload successful",
+  "id": "abc123",
+  "url": "https://cdn.example.com/abc123/original"
+}
+    </pre>
+  </section>
 
-  <h2>Delete an Image</h2>
-  <p><strong>DELETE</strong> /image/:id</p>
-  <p>Headers: <code>Authorization: Bearer &lt;token&gt;</code></p>
+  <section>
+    <h2>GET /image/:id</h2>
+    <p><strong>Description:</strong> Download the original image by ID</p>
+    <p><strong>Response:</strong> Raw image file</p>
+  </section>
 
-  <h2>Upload Metrics</h2>
-  <p><strong>GET</strong> /metrics/uploads</p>
-  <p>Headers: <code>Authorization: Bearer &lt;token&gt;</code></p>
+  <section>
+    <h2>DELETE /image/:id</h2>
+    <p><strong>Description:</strong> Delete an image by ID</p>
+    <p><strong>Headers:</strong></p>
+    <pre>Authorization: Bearer &lt;token&gt;</pre>
+    <p><strong>Success Response:</strong></p>
+    <pre>
+{
+  "message": "Image deleted",
+  "id": "abc123"
+}
+    </pre>
+  </section>
+
+  <section>
+    <h2>GET /metrics/uploads</h2>
+    <p><strong>Description:</strong> Get upload metrics</p>
+    <p><strong>Headers:</strong></p>
+    <pre>Authorization: Bearer &lt;token&gt;</pre>
+    <p><strong>Success Response:</strong></p>
+    <pre>
+[
+  {
+    "id": "abc123",
+    "size": 12345,
+    "uploadedBy": "user@example.com",
+    "type": "image/png",
+    "timestamp": 1700000000000
+  }
+]
+    </pre>
+  </section>
 
 </body>
 </html>
